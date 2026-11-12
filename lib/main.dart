@@ -41,9 +41,30 @@ class LeafClassifier {
     final name = value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
     if (name.contains('blast')) return 'BLAST';
     if (name.contains('brownspot')) return 'BROWNSPOT';
-    if (name.contains('bacterialleafblight') || name == 'blb') return 'BLB';
-    if (name.contains('healthy')) return 'HEALTHY';
+    if (name.contains('bacterialblight') || name == 'blb') return 'BLB';
+    if (name.contains('healthy') ||
+        name == 'normal' ||
+        name == 'good' ||
+        name == 'nodisease' ||
+        name == 'noissue') {
+      return 'HEALTHY';
+    }
     return 'UNKNOWN';
+  }
+
+  static String? _classFromItem(dynamic item) {
+    if (item is! Map<String, dynamic>) return null;
+    final name = item['class'] ?? item['class_name'] ?? item['label'];
+    return name is String ? _mapClass(name) : null;
+  }
+
+  static String? _bestClassFromScores(Map<dynamic, dynamic> scores) {
+    final ranked =
+        scores.entries
+            .where((entry) => entry.key is String && entry.value is num)
+            .toList()
+          ..sort((a, b) => (b.value as num).compareTo(a.value as num));
+    return ranked.isEmpty ? null : _mapClass(ranked.first.key as String);
   }
 
   Future<String> classify(Uint8List jpeg) async {
@@ -74,14 +95,26 @@ class LeafClassifier {
     if (rawPredictions is Map<String, dynamic>) {
       final top = rawPredictions['top'] ?? rawPredictions['prediction'];
       if (top is String) return _mapClass(top);
+      final topClass = _classFromItem(top);
+      if (topClass != null) return topClass;
       final nested = rawPredictions['predictions'];
       if (nested is List && nested.isNotEmpty) {
-        final first = nested.first;
-        if (first is Map<String, dynamic>) {
-          final name = first['class'] ?? first['class_name'];
-          if (name is String) return _mapClass(name);
-        }
+        final ranked = nested.whereType<Map<String, dynamic>>().toList()
+          ..sort(
+            (a, b) => ((b['confidence'] as num?) ?? 0).compareTo(
+              (a['confidence'] as num?) ?? 0,
+            ),
+          );
+        final found = ranked.isEmpty ? null : _classFromItem(ranked.first);
+        if (found != null) return found;
+      } else if (nested is Map) {
+        final found = _classFromItem(nested);
+        if (found != null) return found;
+        final scored = _bestClassFromScores(nested);
+        if (scored != null) return scored;
       }
+      final scored = _bestClassFromScores(rawPredictions);
+      if (scored != null) return scored;
     } else if (rawPredictions is List && rawPredictions.isNotEmpty) {
       final ranked = rawPredictions.whereType<Map<String, dynamic>>().toList()
         ..sort(
@@ -90,9 +123,16 @@ class LeafClassifier {
           ),
         );
       if (ranked.isNotEmpty) {
-        final name = ranked.first['class'] ?? ranked.first['class_name'];
-        if (name is String) return _mapClass(name);
+        final found = _classFromItem(ranked.first);
+        if (found != null) return found;
       }
+    }
+    final topLevel = data['top'] ?? data['class'] ?? data['class_name'];
+    if (topLevel is String) return _mapClass(topLevel);
+    final predictedClasses = data['predicted_classes'];
+    if (predictedClasses is List && predictedClasses.isNotEmpty) {
+      final first = predictedClasses.first;
+      if (first is String) return _mapClass(first);
     }
     return 'UNKNOWN';
   }

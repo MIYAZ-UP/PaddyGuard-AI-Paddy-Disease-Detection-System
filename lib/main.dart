@@ -34,6 +34,7 @@ class LeafClassifier {
   LeafClassifier(this.apiKey, this.modelId);
   final String apiKey;
   final String modelId;
+  String lastRawClassLabel = 'not provided';
 
   static const labels = {'BLAST', 'BROWNSPOT', 'BLB', 'HEALTHY'};
 
@@ -41,7 +42,11 @@ class LeafClassifier {
     final name = value.toLowerCase().replaceAll(RegExp(r'[^a-z]'), '');
     if (name.contains('blast')) return 'BLAST';
     if (name.contains('brownspot')) return 'BROWNSPOT';
-    if (name.contains('bacterialblight') || name == 'blb') return 'BLB';
+    if ((name.contains('bacterial') && name.contains('blight')) ||
+        name.contains('leafblight') ||
+        name == 'blb') {
+      return 'BLB';
+    }
     if (name.contains('healthy') ||
         name == 'normal' ||
         name == 'good' ||
@@ -65,6 +70,35 @@ class LeafClassifier {
             .toList()
           ..sort((a, b) => (b.value as num).compareTo(a.value as num));
     return ranked.isEmpty ? null : _mapClass(ranked.first.key as String);
+  }
+
+  static String _findRawClass(dynamic value) {
+    if (value is Map) {
+      for (final key in ['class', 'class_name', 'label', 'top']) {
+        final candidate = value[key];
+        if (candidate is String) return candidate;
+      }
+      for (final key in ['prediction', 'predictions', 'predicted_classes']) {
+        if (value.containsKey(key)) {
+          final found = _findRawClass(value[key]);
+          if (found != 'not provided') return found;
+        }
+      }
+      final scored =
+          value.entries
+              .where((entry) => entry.key is String && entry.value is num)
+              .toList()
+            ..sort((a, b) => (b.value as num).compareTo(a.value as num));
+      if (scored.isNotEmpty) return scored.first.key as String;
+    } else if (value is List) {
+      for (final item in value) {
+        final found = _findRawClass(item);
+        if (found != 'not provided') return found;
+      }
+    } else if (value is String) {
+      return value;
+    }
+    return 'not provided';
   }
 
   Future<String> classify(Uint8List jpeg) async {
@@ -91,8 +125,11 @@ class LeafClassifier {
       throw 'Roboflow request failed (${res.statusCode})';
     }
     final data = jsonDecode(res.body) as Map<String, dynamic>;
+    lastRawClassLabel = _findRawClass(data);
     final rawPredictions = data['predictions'];
     if (rawPredictions is Map<String, dynamic>) {
+      final directClass = _classFromItem(rawPredictions);
+      if (directClass != null) return directClass;
       final top = rawPredictions['top'] ?? rawPredictions['prediction'];
       if (top is String) return _mapClass(top);
       final topClass = _classFromItem(top);
@@ -116,6 +153,8 @@ class LeafClassifier {
       final scored = _bestClassFromScores(rawPredictions);
       if (scored != null) return scored;
     } else if (rawPredictions is List && rawPredictions.isNotEmpty) {
+      final firstString = rawPredictions.whereType<String>().firstOrNull;
+      if (firstString != null) return _mapClass(firstString);
       final ranked = rawPredictions.whereType<Map<String, dynamic>>().toList()
         ..sort(
           (a, b) => ((b['confidence'] as num?) ?? 0).compareTo(
@@ -394,10 +433,11 @@ class _HomePageState extends State<HomePage> {
       final shot = await cam.takePicture();
       final bytes = await shot.readAsBytes();
       _addLog('Analysing leaf...');
-      final label = await LeafClassifier(
+      final classifier = LeafClassifier(
         _keyCtrl.text.trim(),
         _modelCtrl.text.trim(),
-      ).classify(bytes);
+      );
+      final label = await classifier.classify(bytes);
 
       setState(() {
         _lastLabel = label;
@@ -405,7 +445,9 @@ class _HomePageState extends State<HomePage> {
       });
 
       if (label == 'UNKNOWN') {
-        _addLog('Leaf not clear, nothing sent');
+        _addLog(
+          'Unrecognized model class: ${classifier.lastRawClassLabel}. Nothing sent.',
+        );
       } else if (_port == null) {
         _addLog('Result $label, but Bluetooth is not connected');
         unawaited(_connect());

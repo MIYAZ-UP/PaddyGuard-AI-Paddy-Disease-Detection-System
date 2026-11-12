@@ -275,6 +275,7 @@ class _HomePageState extends State<HomePage> {
   final _keyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
   String _lastLabel = '-';
+  String? _lastRawModelClass;
   DateTime? _lastTime;
 
   double? _temp, _hum;
@@ -492,6 +493,7 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _lastLabel = label;
+        _lastRawModelClass = classifier.lastRawClassLabel;
         _lastTime = DateTime.now();
       });
 
@@ -524,6 +526,7 @@ class _HomePageState extends State<HomePage> {
   Future<void> _clearAiResult() async {
     setState(() {
       _lastLabel = '-';
+      _lastRawModelClass = null;
       _lastTime = null;
       _arduinoAi = 'NONE';
     });
@@ -740,6 +743,14 @@ class _HomePageState extends State<HomePage> {
     final goodLeafWithEnoughMoisture =
         _lastLabel == 'HEALTHY' && (_soil ?? 0) > 65;
     final displayedLabel = _lastLabel == 'HEALTHY' ? 'Good leaf' : _lastLabel;
+    final resultSubtitle =
+        _lastLabel == 'UNKNOWN' &&
+            _lastRawModelClass != null &&
+            _lastRawModelClass != 'not provided'
+        ? 'Roboflow class: $_lastRawModelClass'
+        : (_lastTime == null
+              ? 'No leaf analysed yet'
+              : 'at ${_lastTime!.hour.toString().padLeft(2, '0')}:${_lastTime!.minute.toString().padLeft(2, '0')}');
     final weatherRiskText = _weatherRisk == '-'
         ? 'Waiting for Arduino'
         : _riskName(_weatherRisk);
@@ -982,11 +993,7 @@ class _HomePageState extends State<HomePage> {
                 'AI result: $displayedLabel',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              subtitle: Text(
-                _lastTime == null
-                    ? 'No leaf analysed yet'
-                    : 'at ${_lastTime!.hour.toString().padLeft(2, '0')}:${_lastTime!.minute.toString().padLeft(2, '0')}',
-              ),
+              subtitle: Text(resultSubtitle),
               trailing: IconButton(
                 tooltip: 'Clear AI result',
                 onPressed: _lastLabel == '-' ? null : _clearAiResult,

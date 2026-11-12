@@ -927,14 +927,6 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Disease weather risk bands from your chart: Brown spot very bad at 30–35°C, RH>85%, soil<40%; Rice blast at 20–28°C, RH>90%, soil<40%; Bacterial leaf blight at 25–34°C, RH>85%, soil<40%. Arduino confirms after 2 matching readings.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  Text(
-                    'The chart marks soil below 40% as very bad and as the soil band for weather-risk rules. Flooded paddy probes may read near 100%, so weather-risk prediction may not trigger while the field is flooded; the AI leaf scan still checks for visible disease. Soil % depends on CALDRY/CALWET calibration.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  Text(
                     'Arduino weather risk: $weatherRiskText',
                     style: TextStyle(
                       color: _weatherRisk != '-' && _weatherRisk != 'NONE'

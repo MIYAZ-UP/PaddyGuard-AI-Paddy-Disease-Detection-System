@@ -34,7 +34,7 @@
       BLUE steady           WATCH    outside good field conditions
       BLUE steady           WATCH    one or more readings are moderate
       BLUE fast blink       FAULT    DHT11 is not answering
-      RED fast blink + 150 ms beep every 2 seconds HIGH
+      RED fast blink + 150 ms beep every 5 seconds HIGH
                                  very-bad reading or weather risk
       RED fast blink + continuous buzzer DISEASE
                                  AI found a disease on a leaf
@@ -128,7 +128,7 @@ uint8_t level = LV_SAFE;
 bool  sensorFault = false;
 bool  muted = false;
 const unsigned long CONDITION_BEEP_MS = 150UL;
-const unsigned long CONDITION_BEEP_GAP_MS = 2000UL;
+const unsigned long CONDITION_BEEP_GAP_MS = 5000UL;
 unsigned long nextAlarmBeepAt = 0;
 unsigned long alarmBeepUntil = 0;
 bool redAlertWasActive = false;

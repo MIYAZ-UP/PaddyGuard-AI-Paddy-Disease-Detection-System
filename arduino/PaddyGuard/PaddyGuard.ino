@@ -34,8 +34,8 @@
       BLUE steady           WATCH    outside good field conditions
       BLUE steady           WATCH    one or more readings are moderate
       BLUE fast blink       FAULT    DHT11 is not answering
-      RED fast blink + beeps HIGH    a very-bad reading or weather risk
-      RED fast blink + beep DISEASE  the AI found a disease on a leaf
+      RED fast blink + beep every 5 seconds HIGH / DISEASE
+                                 very-bad reading, weather risk, or AI disease
 
   BLUETOOTH COMMANDS (end each with a new line)
       BLAST | BROWNSPOT | BLB   disease found by the AI
@@ -125,7 +125,11 @@ uint8_t riskStreak = 0;
 uint8_t level = LV_SAFE;
 bool  sensorFault = false;
 bool  muted = false;
-unsigned long chirpUntil = 0;
+const unsigned long ALARM_BEEP_MS = 150UL;
+const unsigned long ALARM_GAP_MS = 5000UL;
+unsigned long nextAlarmBeepAt = 0;
+unsigned long alarmBeepUntil = 0;
+bool redAlertWasActive = false;
 unsigned long lastSample = 0;
 bool  firstSample = true;
 
@@ -255,7 +259,6 @@ void evaluate(unsigned long now) {
     lv = LV_WATCH;
   }
 
-  if (lv > level) chirpUntil = now + 150;   // short chirp when it gets worse
   if (lv < LV_HIGH) muted = false;          // next alarm is audible again
   level = lv;
 }
@@ -263,6 +266,23 @@ void evaluate(unsigned long now) {
 // --------------------------- Outputs -------------------------------
 void updateOutputs(unsigned long now) {
   bool r = false, g = false, b = false;
+  bool redAlert = level == LV_DISEASE ||
+                  (level == LV_HIGH && !sensorFault);
+
+  if (!redAlert) {
+    redAlertWasActive = false;
+    nextAlarmBeepAt = 0;
+    alarmBeepUntil = 0;
+  } else {
+    if (!redAlertWasActive) {
+      redAlertWasActive = true;
+      nextAlarmBeepAt = now;                // first beep immediately
+    }
+    if ((long)(now - nextAlarmBeepAt) >= 0) {
+      alarmBeepUntil = now + ALARM_BEEP_MS;
+      nextAlarmBeepAt = now + ALARM_GAP_MS;
+    }
+  }
 
   if (sensorFault && level != LV_DISEASE) {   // a disease alert wins
     b = ((now / 200UL) % 2UL) == 0;
@@ -278,15 +298,7 @@ void updateOutputs(unsigned long now) {
   setLeds(r, g, b);
 
   bool buz = false;
-  if (!muted) {
-    if (level == LV_DISEASE) {
-      buz = (now % 600UL) < 300UL;
-    } else if (level == LV_HIGH && riskDisease != DZ_NONE) {
-      unsigned long p = now % 20000UL;
-      buz = (p < 100UL) || (p >= 200UL && p < 300UL);
-    }
-    if (now < chirpUntil) buz = true;
-  }
+  if (!muted && redAlert) buz = (long)(alarmBeepUntil - now) > 0;
   buzzerWrite(buz);
 }
 

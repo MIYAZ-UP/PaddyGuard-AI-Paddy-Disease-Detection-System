@@ -5,7 +5,7 @@ PaddyGuard combines a Flutter phone app, a Roboflow rice-leaf classifier, and an
 ## Project contents
 
 - `lib/main.dart` — Flutter app, camera controls, Roboflow inference, Bluetooth telemetry, and field readings.
-- `arduino/PaddyGuard.ino` — Nano sketch for the DHT11, soil probe, HC-05, LEDs, and buzzer.
+- `arduino/PaddyGuard/PaddyGuard.ino` — Nano sketch for the DHT11, soil probe, HC-05, LEDs, and buzzer.
 
 ## Run the Flutter app
 
@@ -20,6 +20,6 @@ Pair the HC-05 in the phone's Bluetooth settings, connect it in PaddyGuard, ente
 
 ## Arduino setup
 
-Open `arduino/PaddyGuard.ino` in the Arduino IDE. Install Adafruit's DHT sensor library and Adafruit Unified Sensor, select Arduino Nano, and upload the sketch. The sketch's pin map and Bluetooth commands are documented at the top of the file.
+Open `arduino/PaddyGuard/PaddyGuard.ino` in the Arduino IDE. Install Adafruit's DHT sensor library and Adafruit Unified Sensor, select Arduino Nano, and upload the sketch. Red alerts beep immediately, then every five seconds. The sketch's pin map and Bluetooth commands are documented at the top of the file.
 
 Calibrate the soil probe with `CALDRY` and `CALWET`. The reported percentage is relative to those calibration readings, not a universal soil-water percentage. For a flooded paddy field, the probe may read near 100%; interpret the weather-risk thresholds in the sketch with that in mind.

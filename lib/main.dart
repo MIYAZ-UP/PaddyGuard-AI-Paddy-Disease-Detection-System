@@ -758,14 +758,11 @@ class _HomePageState extends State<HomePage> {
         : _riskName(_weatherRisk);
     final statusKnown = lvl != null && lvl >= 0 && lvl < 4;
     final greenActive = statusKnown && lvl == 0 && !_sensorFault;
-    final blueActive = statusKnown && (lvl == 1 || _sensorFault);
-    final redActive = statusKnown && (lvl == 2 || lvl == 3) && !_sensorFault;
+    final blueActive = statusKnown && (lvl == 1 || (_sensorFault && lvl != 3));
+    final redActive = statusKnown && (lvl == 3 || (lvl == 2 && !_sensorFault));
     final anyBlink = _sensorFault || lvl == 2 || lvl == 3;
     final buzzerActive =
-        statusKnown &&
-        (lvl == 3 ||
-            (lvl == 2 && _weatherRisk != 'NONE' && _weatherRisk != '-')) &&
-        !_muted;
+        statusKnown && (lvl == 3 || (lvl == 2 && !_sensorFault)) && !_muted;
 
     return Scaffold(
       appBar: AppBar(title: const Text('PADDY GUARD')),
@@ -1108,7 +1105,7 @@ class _HomePageState extends State<HomePage> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Arduino buzzer: ${buzzerActive ? 'ON' : (_muted ? 'Muted' : 'OFF')}',
+                        'Arduino buzzer: ${buzzerActive ? 'Beep every 5 seconds' : (_muted ? 'Muted' : 'OFF')}',
                       ),
                     ],
                   ),

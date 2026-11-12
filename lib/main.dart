@@ -35,6 +35,7 @@ class LeafClassifier {
   final String apiKey;
   final String modelId;
   String lastRawClassLabel = 'not provided';
+  String lastPredictionSummary = '';
 
   static const labels = {'BLAST', 'BROWNSPOT', 'BLB', 'HEALTHY'};
 
@@ -76,6 +77,26 @@ class LeafClassifier {
             .toList()
           ..sort((a, b) => (b.value as num).compareTo(a.value as num));
     return ranked.isEmpty ? null : _mapClass(ranked.first.key as String);
+  }
+
+  String? _aggregateClassPredictions(List<dynamic> predictions) {
+    final totals = <String, double>{};
+    for (final prediction in predictions) {
+      final label = _classFromItem(prediction);
+      if (label == null || label == 'UNKNOWN') continue;
+      final item = prediction as Map<String, dynamic>;
+      final confidence = item['confidence'];
+      final score = confidence is num ? confidence.toDouble() : 1.0;
+      totals.update(label, (value) => value + score, ifAbsent: () => score);
+    }
+    if (totals.isEmpty) return null;
+    final ranked = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    lastPredictionSummary = ranked
+        .take(4)
+        .map((entry) => '${entry.key} ${entry.value.toStringAsFixed(2)}')
+        .join(', ');
+    return ranked.first.key;
   }
 
   static String _findRawClass(dynamic value) {
@@ -160,6 +181,8 @@ class LeafClassifier {
       if (topClass != null) return topClass;
       final nested = rawPredictions['predictions'];
       if (nested is List && nested.isNotEmpty) {
+        final aggregated = _aggregateClassPredictions(nested);
+        if (aggregated != null) return aggregated;
         final ranked = nested.whereType<Map<String, dynamic>>().toList()
           ..sort(
             (a, b) => ((b['confidence'] as num?) ?? 0).compareTo(
@@ -179,6 +202,8 @@ class LeafClassifier {
     } else if (rawPredictions is List && rawPredictions.isNotEmpty) {
       final firstString = rawPredictions.whereType<String>().firstOrNull;
       if (firstString != null) return _mapClass(firstString);
+      final aggregated = _aggregateClassPredictions(rawPredictions);
+      if (aggregated != null) return aggregated;
       final ranked = rawPredictions.whereType<Map<String, dynamic>>().toList()
         ..sort(
           (a, b) => ((b['confidence'] as num?) ?? 0).compareTo(
@@ -474,10 +499,17 @@ class _HomePageState extends State<HomePage> {
         _addLog(
           'Unrecognized model class: ${classifier.lastRawClassLabel}. Nothing sent.',
         );
-      } else if (_port == null) {
+      } else {
+        if (classifier.lastPredictionSummary.isNotEmpty) {
+          _addLog(
+            'Model class confidence totals: ${classifier.lastPredictionSummary}',
+          );
+        }
+      }
+      if (label != 'UNKNOWN' && _port == null) {
         _addLog('Result $label, but Bluetooth is not connected');
         unawaited(_connect());
-      } else {
+      } else if (label != 'UNKNOWN') {
         await _port!.writeText('$label\n');
         _addLog('Sent $label to Arduino');
       }

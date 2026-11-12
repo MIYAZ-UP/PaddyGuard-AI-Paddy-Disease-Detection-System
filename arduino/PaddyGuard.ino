@@ -32,9 +32,9 @@
       GREEN steady          SAFE     AI says healthy and soil is above 65%
       GREEN blink           SAFE     all general growing conditions are good
       BLUE steady           WATCH    outside good field conditions
-      BLUE slow blink       WATCH    soil is dry, irrigate
+      BLUE steady           WATCH    one or more readings are moderate
       BLUE fast blink       FAULT    DHT11 is not answering
-      RED steady + 2 beeps  HIGH     weather matches a disease window
+      RED fast blink + beeps HIGH    a very-bad reading or weather risk
       RED fast blink + beep DISEASE  the AI found a disease on a leaf
 
   BLUETOOTH COMMANDS (end each with a new line)
@@ -78,7 +78,6 @@ const uint8_t PIN_SOIL_PWR = A2;
 // ------------------------- Tunable limits --------------------------
 const unsigned long SAMPLE_MS   = 2000UL;     // DHT11 needs 1 s or more
 const unsigned long AI_HOLD_MS  = 600000UL;   // AI alert stays 10 min
-const uint8_t       SOIL_DRY_PCT = 20;        // below this = irrigate
 const uint8_t       FAULT_AFTER  = 3;         // failed DHT reads in a row
 const uint8_t       RISK_CONFIRM = 2;         // same weather risk this many
                                               // readings in a row = HIGH
@@ -205,6 +204,16 @@ void readSensors() {
 }
 
 // ------------------------- Risk decision ---------------------------
+bool allGrowingConditionsGood() {
+  return haveClimate && temp >= 25 && temp <= 35 &&
+         hum >= 70 && hum <= 90 && soilPct >= 70;
+}
+
+bool anyGrowingConditionVeryBad() {
+  if (!haveClimate) return false;
+  return temp < 15 || temp > 40 || hum < 50 || hum > 95 || soilPct < 40;
+}
+
 uint8_t climateDisease() {
   if (!haveClimate) return DZ_NONE;
   if (soilPct >= 40) return DZ_NONE;
@@ -236,10 +245,11 @@ void evaluate(unsigned long now) {
     lv = LV_DISEASE;
   } else if (riskDisease != DZ_NONE) {
     lv = LV_HIGH;
+  } else if (haveClimate && anyGrowingConditionVeryBad()) {
+    lv = LV_HIGH;
   } else if (aiHealthyActive()) {
-    lv = soilPct > 65 ? LV_SAFE : LV_WATCH;
-  } else if (haveClimate && temp >= 25 && temp <= 35 &&
-             hum >= 70 && hum <= 90 && soilPct >= 70) {
+    lv = allGrowingConditionsGood() && soilPct > 65 ? LV_SAFE : LV_WATCH;
+  } else if (allGrowingConditionsGood()) {
     lv = LV_SAFE;
   } else {
     lv = LV_WATCH;
@@ -259,10 +269,9 @@ void updateOutputs(unsigned long now) {
   } else if (level == LV_SAFE) {
     g = aiHealthyActive() || ((now / 500UL) % 2UL) == 0;
   } else if (level == LV_WATCH) {
-    if (soilPct < SOIL_DRY_PCT) b = ((now / 500UL) % 2UL) == 0;
-    else b = true;
+    b = true;
   } else if (level == LV_HIGH) {
-    r = true;
+    r = ((now / 250UL) % 2UL) == 0;
   } else {
     r = ((now / 250UL) % 2UL) == 0;
   }
@@ -272,7 +281,7 @@ void updateOutputs(unsigned long now) {
   if (!muted) {
     if (level == LV_DISEASE) {
       buz = (now % 600UL) < 300UL;
-    } else if (level == LV_HIGH) {
+    } else if (level == LV_HIGH && riskDisease != DZ_NONE) {
       unsigned long p = now % 20000UL;
       buz = (p < 100UL) || (p >= 200UL && p < 300UL);
     }

@@ -414,38 +414,37 @@ class _HomePageState extends State<HomePage> {
   String _humidityGuidance() {
     final humidity = _hum;
     if (humidity == null) return 'Waiting for Arduino reading.';
-    if (humidity < 60) {
-      return 'Below 60%: low humidity; possible water stress and poor grain set.';
+    if (humidity < 50) {
+      return 'Very bad: below 50% in the growing-conditions chart.';
     }
-    if (humidity < 70) return 'Below the preferred 70–80% range.';
-    if (humidity <= 80) {
-      return '70–80%: preferred for most of the crop; 80% also meets Brown Spot humidity threshold.';
+    if (humidity < 70) {
+      return 'Moderate: 50–69% in the growing-conditions chart.';
     }
-    if (humidity < 85) {
-      return 'Meets the Brown Spot humidity threshold; temperature and soil must also match.';
+    if (humidity <= 90) {
+      return 'Good: 70–90% in the growing-conditions chart.';
     }
-    if (humidity < 90) {
-      return 'Meets BLB and Brown Spot humidity thresholds; other conditions must also match.';
+    if (humidity <= 95) {
+      return 'Moderate: 91–95% in the growing-conditions chart.';
     }
-    return 'Meets the humidity thresholds; Arduino also checks temperature and soil.';
+    return 'Very bad: above 95% in the growing-conditions chart.';
   }
 
   String _soilMoistureGuidance() {
     final moisture = _soil;
     if (moisture == null) return 'Waiting for Arduino reading.';
     if (moisture < 20) {
-      return 'Below 20%: dry-soil alert and Brown Spot soil threshold; temperature and humidity must also match.';
+      return 'Below 20%: dry-soil alert; also below the chart’s <40% very-bad soil band.';
     }
     if (moisture >= 90) {
-      return 'Near-flooded reading. Paddy probes may read close to 100%; BLB soil threshold is met, Brown Spot soil threshold is not.';
+      return 'Near-flooded reading. Paddy probes may read close to 100%; this is good soil moisture in the chart.';
     }
-    if (moisture >= 60) {
-      return 'Meets the BLB soil threshold (≥60%); Brown Spot needs <30%.';
+    if (moisture >= 70) {
+      return 'Good: 70–100% in the growing-conditions chart.';
     }
-    if (moisture < 30) {
-      return 'Meets the Brown Spot soil threshold (<30%); BLB needs ≥60%.';
+    if (moisture >= 40) {
+      return 'Moderate: 40–69% in the growing-conditions chart.';
     }
-    return 'Above the dry threshold, but below BLB soil threshold (≥60%).';
+    return 'Very bad: below 40% in the growing-conditions chart.';
   }
 
   String _condition(
@@ -592,9 +591,12 @@ class _HomePageState extends State<HomePage> {
     final greenActive = statusKnown && lvl == 0 && !_sensorFault;
     final blueActive = statusKnown && (lvl == 1 || _sensorFault);
     final redActive = statusKnown && (lvl == 2 || lvl == 3) && !_sensorFault;
-    final anyBlink =
-        _sensorFault || lvl == 3 || (lvl == 1 && (_soil ?? 100) < 20);
-    final buzzerActive = statusKnown && (lvl == 2 || lvl == 3) && !_muted;
+    final anyBlink = _sensorFault || lvl == 2 || lvl == 3;
+    final buzzerActive =
+        statusKnown &&
+        (lvl == 3 ||
+            (lvl == 2 && _weatherRisk != 'NONE' && _weatherRisk != '-')) &&
+        !_muted;
 
     return Scaffold(
       appBar: AppBar(title: const Text('PaddyGuard')),
@@ -857,9 +859,9 @@ class _HomePageState extends State<HomePage> {
                   Text(
                     'Humidity guide: ${_humidityGuidance()}',
                     style: TextStyle(
-                      color: _hum != null && _hum! >= 80
-                          ? Colors.deepOrange.shade800
-                          : null,
+                      color: _hum == null
+                          ? null
+                          : _conditionColor(_condition(_hum, 70, 90, 50, 95)),
                     ),
                   ),
                   Text('Soil moisture: ${_soil ?? '-'} %'),
@@ -874,9 +876,13 @@ class _HomePageState extends State<HomePage> {
                   Text(
                     'Paddy soil: ${_soilMoistureGuidance()}',
                     style: TextStyle(
-                      color: _soil != null && _soil! < 20
-                          ? Colors.red.shade700
-                          : null,
+                      color: _soil == null
+                          ? null
+                          : _conditionColor(
+                              _soil! >= 70
+                                  ? 'Good'
+                                  : (_soil! >= 40 ? 'Moderate' : 'Very bad'),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -885,7 +891,7 @@ class _HomePageState extends State<HomePage> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   Text(
-                    'Flooded paddy probes may read near 100%, so the <20% dry-soil blue blink will rarely trigger, the ≥60% BLB soil check will almost always pass, and the <30% Brown Spot check will almost never match. Soil % is relative to CALDRY/CALWET probe calibration.',
+                    'The chart marks soil below 40% as very bad and as the soil band for weather-risk rules. Flooded paddy probes may read near 100%, so weather-risk prediction may not trigger while the field is flooded; the AI leaf scan still checks for visible disease. Soil % depends on CALDRY/CALWET calibration.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   Text(

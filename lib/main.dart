@@ -521,6 +521,22 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  Future<void> _clearAiResult() async {
+    setState(() {
+      _lastLabel = '-';
+      _lastTime = null;
+      _arduinoAi = 'NONE';
+    });
+    if (_port != null) {
+      try {
+        await _port!.writeText('CLEAR\n');
+      } catch (e) {
+        _addLog('Could not clear Arduino AI result: $e');
+      }
+    }
+    _addLog('AI result cleared');
+  }
+
   Future<void> _startMonitoring() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('apiKey', _keyCtrl.text.trim());
@@ -971,6 +987,11 @@ class _HomePageState extends State<HomePage> {
                     ? 'No leaf analysed yet'
                     : 'at ${_lastTime!.hour.toString().padLeft(2, '0')}:${_lastTime!.minute.toString().padLeft(2, '0')}',
               ),
+              trailing: IconButton(
+                tooltip: 'Clear AI result',
+                onPressed: _lastLabel == '-' ? null : _clearAiResult,
+                icon: const Icon(Icons.clear),
+              ),
             ),
           ),
           Card(
@@ -1102,9 +1123,7 @@ class _HomePageState extends State<HomePage> {
                         child: const Text('Mute buzzer'),
                       ),
                       TextButton(
-                        onPressed: connected
-                            ? () => _port!.writeText('HEALTHY\n')
-                            : null,
+                        onPressed: connected ? _clearAiResult : null,
                         child: const Text('Clear alert'),
                       ),
                     ],

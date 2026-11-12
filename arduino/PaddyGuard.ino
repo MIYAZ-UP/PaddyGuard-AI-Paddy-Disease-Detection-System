@@ -29,8 +29,9 @@
       result over Bluetooth as a text line (BLAST, BROWNSPOT, BLB or
       HEALTHY). The Nano combines that with the weather inside the field:
 
-      GREEN steady          SAFE     healthy, weather normal
-      BLUE steady           WATCH    humid (80%+) or hot (over 35 C)
+      GREEN steady          SAFE     AI healthy, 25-35 C, 70-90% RH,
+                                          soil moisture above 65%
+      BLUE steady           WATCH    outside good field conditions
       BLUE slow blink       WATCH    soil is dry, irrigate
       BLUE fast blink       FAULT    DHT11 is not answering
       RED steady + 2 beeps  HIGH     weather matches a disease window
@@ -38,7 +39,9 @@
 
   BLUETOOTH COMMANDS (end each with a new line)
       BLAST | BROWNSPOT | BLB   disease found by the AI
-      HEALTHY or CLEAR          leaf is fine, clear the AI alert
+      HEALTHY                    AI found a healthy leaf (green only when
+                                 field conditions are good and soil is >65%)
+      CLEAR                      clear the current AI result/alert
       MUTE / UNMUTE             silence / restore the buzzer
       STATUS                    reply with one reading now
       TEST                      LED and buzzer self test
@@ -119,6 +122,7 @@ bool  soilDoDry = false;
 
 uint8_t aiDisease = DZ_NONE;
 unsigned long aiStart = 0;
+bool aiHealthy = false;
 uint8_t riskDisease = DZ_NONE;
 uint8_t lastRawRisk = DZ_NONE;
 uint8_t riskStreak = 0;
@@ -135,6 +139,10 @@ char usbBuf[24]; uint8_t usbLen = 0;
 // ------------------------- Small helpers ---------------------------
 bool aiActive() {
   return aiDisease != DZ_NONE && (millis() - aiStart) < AI_HOLD_MS;
+}
+
+bool aiHealthyActive() {
+  return aiHealthy && (millis() - aiStart) < AI_HOLD_MS;
 }
 
 void setLeds(bool r, bool g, bool b) {
@@ -228,7 +236,11 @@ void evaluate(unsigned long now) {
     lv = LV_DISEASE;
   } else if (riskDisease != DZ_NONE) {
     lv = LV_HIGH;
-  } else if (haveClimate && (hum >= 80 || temp > 35)) {
+  } else if (aiHealthyActive()) {
+    bool goodField = haveClimate && temp >= 25 && temp <= 35 &&
+                     hum >= 70 && hum <= 90 && soilPct > 65;
+    lv = goodField ? LV_SAFE : LV_WATCH;
+  } else if (haveClimate && (hum > 90 || temp > 35)) {
     lv = LV_WATCH;
   } else if (soilPct < SOIL_DRY_PCT) {
     lv = LV_WATCH;
@@ -306,8 +318,9 @@ void printReadable(Stream &out) {
 }
 
 // --------------------------- Commands ------------------------------
-void setAi(uint8_t dz, Stream &out) {
+void setAi(uint8_t dz, Stream &out, bool healthyResult = false) {
   aiDisease = dz;
+  aiHealthy = healthyResult;
   aiStart = millis();
   evaluate(millis());
   out.print(F("OK AI="));
@@ -321,7 +334,9 @@ void processCommand(const char *cmd, Stream &out) {
     setAi(DZ_BROWN, out);
   } else if (!strcmp(cmd, "BLB")) {
     setAi(DZ_BLB, out);
-  } else if (!strcmp(cmd, "HEALTHY") || !strcmp(cmd, "CLEAR")) {
+  } else if (!strcmp(cmd, "HEALTHY")) {
+    setAi(DZ_NONE, out, true);
+  } else if (!strcmp(cmd, "CLEAR")) {
     setAi(DZ_NONE, out);
   } else if (!strcmp(cmd, "MUTE")) {
     muted = true;

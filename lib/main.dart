@@ -20,7 +20,7 @@ class PaddyGuardApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => MaterialApp(
-    title: 'PaddyGuard',
+    title: 'PADDY GUARD',
     theme: ThemeData(colorSchemeSeed: Colors.green, useMaterial3: true),
     home: const HomePage(),
   );
@@ -768,7 +768,7 @@ class _HomePageState extends State<HomePage> {
         !_muted;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('PaddyGuard')),
+      appBar: AppBar(title: const Text('PADDY GUARD')),
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [

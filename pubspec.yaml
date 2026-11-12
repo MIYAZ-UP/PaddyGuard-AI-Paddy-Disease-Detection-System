@@ -23,6 +23,25 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/paddyguard_logo.png
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/paddyguard_logo.png
+    background_color: "#00451F"
+    theme_color: "#006B35"
+  windows:
+    generate: true
+    image_path: assets/paddyguard_logo.png
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: assets/paddyguard_logo.png
 
 flutter:
   uses-material-design: true

@@ -15,7 +15,6 @@ dependencies:
   bluetooth_serial_next: ^0.1.0
   camera: ^0.11.0
   http: ^1.2.0
-  image_picker: ^1.2.4
   shared_preferences: ^2.3.0
   wakelock_plus: ^1.2.0
 
@@ -27,5 +26,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - assets/sample_healthy_rice.jpg

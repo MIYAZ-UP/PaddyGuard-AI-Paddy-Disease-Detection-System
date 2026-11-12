@@ -4,13 +4,12 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:bluetooth_serial_next/bluetooth_serial_next.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -137,9 +136,10 @@ class _HomePageState extends State<HomePage> {
   bool _blinkOn = true;
   bool _sensorFault = false;
   bool _muted = false;
+  String _arduinoAi = 'NONE';
   Timer? _blinkTimer;
-  Uint8List? _selectedLeafBytes;
-  final _imagePicker = ImagePicker();
+  Timer? _greenBlinkTimer;
+  bool _greenBlinkOn = true;
   int _intervalMin = 5;
 
   final _keyCtrl = TextEditingController();
@@ -158,6 +158,9 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _blinkTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
       if (mounted) setState(() => _blinkOn = !_blinkOn);
+    });
+    _greenBlinkTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (mounted) setState(() => _greenBlinkOn = !_greenBlinkOn);
     });
     _init();
   }
@@ -326,6 +329,7 @@ class _HomePageState extends State<HomePage> {
           _hum = double.tryParse(p[2]);
           _soil = int.tryParse(p[3]);
           _level = int.tryParse(p[4]);
+          if (p.length >= 6) _arduinoAi = p[5];
           if (p.length >= 7) _weatherRisk = p[6];
           if (p.length >= 8) _sensorFault = p[7] == '1';
           if (p.length >= 9) _muted = p[8] == '1';
@@ -337,25 +341,6 @@ class _HomePageState extends State<HomePage> {
   }
 
   // --------------------- Capture + analyse + send -------------------
-  Future<void> _pickLeafPhoto() async {
-    try {
-      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
-      if (file == null) return;
-      setState(() => _selectedLeafBytes = null);
-      final bytes = await file.readAsBytes();
-      setState(() => _selectedLeafBytes = bytes);
-      _addLog('Selected leaf photo');
-    } catch (e) {
-      _addLog('Could not open photo gallery: $e');
-    }
-  }
-
-  Future<void> _useSampleLeaf() async {
-    final data = await rootBundle.load('assets/sample_healthy_rice.jpg');
-    setState(() => _selectedLeafBytes = data.buffer.asUint8List());
-    _addLog('Loaded healthy rice sample photo');
-  }
-
   Future<void> _cycle() async {
     if (_busy) return;
     _busy = true;
@@ -364,13 +349,10 @@ class _HomePageState extends State<HomePage> {
       if (_keyCtrl.text.trim().isEmpty) throw 'Enter the API key first';
       if (_modelCtrl.text.trim().isEmpty) throw 'Enter the Roboflow model ID';
 
-      var bytes = _selectedLeafBytes;
-      if (bytes == null) {
-        final cam = _cam;
-        if (cam == null || !cam.value.isInitialized) throw 'Camera not ready';
-        final shot = await cam.takePicture();
-        bytes = await shot.readAsBytes();
-      }
+      final cam = _cam;
+      if (cam == null || !cam.value.isInitialized) throw 'Camera not ready';
+      final shot = await cam.takePicture();
+      final bytes = await shot.readAsBytes();
       _addLog('Analysing leaf...');
       final label = await LeafClassifier(
         _keyCtrl.text.trim(),
@@ -544,7 +526,8 @@ class _HomePageState extends State<HomePage> {
     bool active, {
     bool blink = false,
   }) {
-    final visible = active && (!blink || _blinkOn);
+    final blinkOn = name == 'Green' ? _greenBlinkOn : _blinkOn;
+    final visible = active && (!blink || blinkOn);
     return Expanded(
       child: Column(
         children: [
@@ -579,6 +562,7 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _timer?.cancel();
     _blinkTimer?.cancel();
+    _greenBlinkTimer?.cancel();
     _lineSub?.cancel();
     _port?.close();
     _cam?.dispose();
@@ -704,27 +688,6 @@ class _HomePageState extends State<HomePage> {
                       height: 80,
                       child: Center(child: Text('Camera not ready')),
                     ),
-                  if (_selectedLeafBytes != null) ...[
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.memory(
-                        _selectedLeafBytes!,
-                        height: 150,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: () =>
-                            setState(() => _selectedLeafBytes = null),
-                        icon: const Icon(Icons.camera_alt_outlined),
-                        label: const Text('Use live camera instead'),
-                      ),
-                    ),
-                  ],
                   if (_backCameras.length > 1) ...[
                     const SizedBox(height: 4),
                     InputDecorator(
@@ -830,21 +793,6 @@ class _HomePageState extends State<HomePage> {
                       const Text(' min'),
                     ],
                   ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _busy ? null : _pickLeafPhoto,
-                        icon: const Icon(Icons.photo_library_outlined),
-                        label: const Text('Choose leaf photo'),
-                      ),
-                      TextButton.icon(
-                        onPressed: _busy ? null : _useSampleLeaf,
-                        icon: const Icon(Icons.eco_outlined),
-                        label: const Text('Try healthy sample'),
-                      ),
-                    ],
-                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -933,7 +881,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Weather risk rules from Arduino: Blast 20–30°C + RH≥90%; BLB 25–34°C + RH≥85% + soil≥60%; Brown Spot 25–32°C + RH≥80% + soil<30%. Risk requires 2 consecutive matching readings.',
+                    'Disease weather risk bands from your chart: Brown spot very bad at 30–35°C, RH>85%, soil<40%; Rice blast at 20–28°C, RH>90%, soil<40%; Bacterial leaf blight at 25–34°C, RH>85%, soil<40%. Arduino confirms after 2 matching readings.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                   Text(
@@ -970,7 +918,12 @@ class _HomePageState extends State<HomePage> {
                         redActive,
                         blink: anyBlink && redActive,
                       ),
-                      _rgbIndicator('Green', Colors.green, greenActive),
+                      _rgbIndicator(
+                        'Green',
+                        Colors.green,
+                        greenActive,
+                        blink: greenActive && _arduinoAi != 'HEALTHY',
+                      ),
                       _rgbIndicator(
                         'Blue',
                         Colors.blue,

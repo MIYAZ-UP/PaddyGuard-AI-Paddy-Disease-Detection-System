@@ -29,8 +29,8 @@
       result over Bluetooth as a text line (BLAST, BROWNSPOT, BLB or
       HEALTHY). The Nano combines that with the weather inside the field:
 
-      GREEN steady          SAFE     AI healthy, 25-35 C, 70-90% RH,
-                                          soil moisture above 65%
+      GREEN steady          SAFE     AI says healthy and soil is above 65%
+      GREEN blink           SAFE     all general growing conditions are good
       BLUE steady           WATCH    outside good field conditions
       BLUE slow blink       WATCH    soil is dry, irrigate
       BLUE fast blink       FAULT    DHT11 is not answering
@@ -88,11 +88,8 @@ const uint8_t       RISK_CONFIRM = 2;         // same weather risk this many
 // loud the rest of the time, flip this value.
 const bool BUZZER_ACTIVE_LOW = true;
 
-// Weather windows that favour each disease (rules of thumb, tune them
-// with your local agriculture office's advice).
-//   Rice blast             20-30 C and humidity 90 % or more
-//   Bacterial leaf blight  25-34 C, humidity 85 %+, wet soil (60 %+)
-//   Brown spot             25-32 C, humidity 80 %+, dry stressed soil (<30 %)
+// Disease-risk alerts use the very-bad bands from the user's disease chart.
+// All three require soil below 40%, as specified in that chart.
 
 // ----------------------------- Codes -------------------------------
 const uint8_t LV_SAFE = 0, LV_WATCH = 1, LV_HIGH = 2, LV_DISEASE = 3;
@@ -210,9 +207,12 @@ void readSensors() {
 // ------------------------- Risk decision ---------------------------
 uint8_t climateDisease() {
   if (!haveClimate) return DZ_NONE;
-  if (temp >= 20 && temp <= 30 && hum >= 90) return DZ_BLAST;
-  if (temp >= 25 && temp <= 34 && hum >= 85 && soilPct >= 60) return DZ_BLB;
-  if (temp >= 25 && temp <= 32 && hum >= 80 && soilPct < 30) return DZ_BROWN;
+  if (soilPct >= 40) return DZ_NONE;
+  // Overlapping chart bands are resolved in this order: blast, brown spot,
+  // then bacterial leaf blight.
+  if (temp >= 20 && temp <= 28 && hum > 90) return DZ_BLAST;
+  if (temp >= 30 && temp <= 35 && hum > 85) return DZ_BROWN;
+  if (temp >= 25 && temp <= 34 && hum > 85) return DZ_BLB;
   return DZ_NONE;
 }
 
@@ -237,12 +237,11 @@ void evaluate(unsigned long now) {
   } else if (riskDisease != DZ_NONE) {
     lv = LV_HIGH;
   } else if (aiHealthyActive()) {
-    bool goodField = haveClimate && temp >= 25 && temp <= 35 &&
-                     hum >= 70 && hum <= 90 && soilPct > 65;
-    lv = goodField ? LV_SAFE : LV_WATCH;
-  } else if (haveClimate && (hum > 90 || temp > 35)) {
-    lv = LV_WATCH;
-  } else if (soilPct < SOIL_DRY_PCT) {
+    lv = soilPct > 65 ? LV_SAFE : LV_WATCH;
+  } else if (haveClimate && temp >= 25 && temp <= 35 &&
+             hum >= 70 && hum <= 90 && soilPct >= 70) {
+    lv = LV_SAFE;
+  } else {
     lv = LV_WATCH;
   }
 
@@ -258,7 +257,7 @@ void updateOutputs(unsigned long now) {
   if (sensorFault && level != LV_DISEASE) {   // a disease alert wins
     b = ((now / 200UL) % 2UL) == 0;
   } else if (level == LV_SAFE) {
-    g = true;
+    g = aiHealthyActive() || ((now / 500UL) % 2UL) == 0;
   } else if (level == LV_WATCH) {
     if (soilPct < SOIL_DRY_PCT) b = ((now / 500UL) % 2UL) == 0;
     else b = true;
@@ -297,7 +296,9 @@ void sendTelemetry(Stream &out) {
   out.print(hum, 0);             out.print(',');
   out.print(soilPct);            out.print(',');
   out.print(level);              out.print(',');
-  out.print(aiActive() ? DZ_NAME[aiDisease] : DZ_NAME[DZ_NONE]);
+  if (aiActive()) out.print(DZ_NAME[aiDisease]);
+  else if (aiHealthyActive()) out.print(F("HEALTHY"));
+  else out.print(DZ_NAME[DZ_NONE]);
   out.print(',');
   out.print(DZ_NAME[riskDisease]); out.print(',');
   out.print(sensorFault ? 1 : 0);  out.print(',');
@@ -311,7 +312,10 @@ void printReadable(Stream &out) {
   out.print(F("% (raw "));  out.print(soilRaw);
   out.print(F(", DO="));    out.print(soilDoDry ? F("dry") : F("wet"));
   out.print(F(")  Level=")); out.print(LV_NAME[level]);
-  out.print(F("  AI="));    out.print(aiActive() ? DZ_NAME[aiDisease] : DZ_NAME[DZ_NONE]);
+  out.print(F("  AI="));
+  if (aiActive()) out.print(DZ_NAME[aiDisease]);
+  else if (aiHealthyActive()) out.print(F("HEALTHY"));
+  else out.print(DZ_NAME[DZ_NONE]);
   out.print(F("  Risk="));  out.print(DZ_NAME[riskDisease]);
   if (sensorFault) out.print(F("  DHT11 FAULT"));
   out.println();

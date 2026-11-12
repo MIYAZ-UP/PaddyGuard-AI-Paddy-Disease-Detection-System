@@ -763,6 +763,13 @@ class _HomePageState extends State<HomePage> {
     final anyBlink = _sensorFault || lvl == 2 || lvl == 3;
     final buzzerActive =
         statusKnown && (lvl == 3 || (lvl == 2 && !_sensorFault)) && !_muted;
+    final buzzerStatus = _muted
+        ? 'Muted'
+        : (!buzzerActive
+              ? 'OFF'
+              : (lvl == 3
+                    ? 'Long beep every 5 seconds'
+                    : 'Short beep every 5 seconds'));
 
     return Scaffold(
       appBar: AppBar(title: const Text('PADDY GUARD')),
@@ -1104,9 +1111,7 @@ class _HomePageState extends State<HomePage> {
                         color: buzzerActive ? Colors.red : Colors.grey,
                       ),
                       const SizedBox(width: 6),
-                      Text(
-                        'Arduino buzzer: ${buzzerActive ? 'Beep every 5 seconds' : (_muted ? 'Muted' : 'OFF')}',
-                      ),
+                      Text('Arduino buzzer: $buzzerStatus'),
                     ],
                   ),
                   const SizedBox(height: 6),

@@ -1079,6 +1079,31 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 8),
+                  Card(
+                    color: weatherRiskColor.withValues(alpha: 0.08),
+                    child: ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                      ),
+                      leading: Icon(
+                        Icons.warning_amber_rounded,
+                        color: weatherRiskColor,
+                      ),
+                      title: const Text(
+                        'AI Weather Risk According to Arduino Sensors',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(
+                        weatherRiskText,
+                        style: TextStyle(
+                          color: weatherRiskColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   const Text('Arduino RGB status (shown on screen)'),
                   const SizedBox(height: 8),
                   Row(
@@ -1148,27 +1173,6 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                 ],
-              ),
-            ),
-          ),
-          Card(
-            color: weatherRiskColor.withValues(alpha: 0.08),
-            child: ListTile(
-              leading: Icon(
-                Icons.warning_amber_rounded,
-                color: weatherRiskColor,
-              ),
-              title: const Text(
-                'AI Weather Risk According to Arduino Sensors',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: Text(
-                weatherRiskText,
-                style: TextStyle(
-                  color: weatherRiskColor,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
               ),
             ),
           ),

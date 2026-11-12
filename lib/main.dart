@@ -1125,13 +1125,22 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  Row(
+                  Wrap(
+                    spacing: 4,
                     children: [
                       TextButton(
                         onPressed: connected
-                            ? () => _port!.writeText('MUTE\n')
+                            ? () => _port!.writeText(
+                                _muted ? 'UNMUTE\n' : 'MUTE\n',
+                              )
                             : null,
-                        child: const Text('Mute buzzer'),
+                        child: Text(_muted ? 'Unmute buzzer' : 'Mute buzzer'),
+                      ),
+                      TextButton(
+                        onPressed: connected
+                            ? () => _port!.writeText('TEST\n')
+                            : null,
+                        child: const Text('Test buzzer and LEDs'),
                       ),
                       TextButton(
                         onPressed: connected ? _clearAiResult : null,

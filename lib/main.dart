@@ -764,7 +764,7 @@ class _HomePageState extends State<HomePage> {
         ? 'Waiting for Arduino'
         : _riskName(_weatherRisk);
     final weatherRiskColor = _weatherRisk == '-'
-        ? Colors.grey
+        ? Colors.blue
         : (_weatherRisk == 'NONE' ? Colors.green : Colors.red);
     final statusKnown = lvl != null && lvl >= 0 && lvl < 4;
     final greenActive = statusKnown && lvl == 0 && !_sensorFault;
@@ -1159,7 +1159,7 @@ class _HomePageState extends State<HomePage> {
                 color: weatherRiskColor,
               ),
               title: const Text(
-                'AI Weather Risk',
+                'AI Weather Risk According to Arduino Sensors',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               subtitle: Text(

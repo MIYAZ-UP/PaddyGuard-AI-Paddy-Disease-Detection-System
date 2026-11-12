@@ -763,6 +763,9 @@ class _HomePageState extends State<HomePage> {
     final weatherRiskText = _weatherRisk == '-'
         ? 'Waiting for Arduino'
         : _riskName(_weatherRisk);
+    final weatherRiskColor = _weatherRisk == '-'
+        ? Colors.grey
+        : (_weatherRisk == 'NONE' ? Colors.green : Colors.red);
     final statusKnown = lvl != null && lvl >= 0 && lvl < 4;
     final greenActive = statusKnown && lvl == 0 && !_sensorFault;
     final blueActive = statusKnown && (lvl == 1 || (_sensorFault && lvl != 3));
@@ -1067,17 +1070,6 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    'Arduino weather risk: $weatherRiskText',
-                    style: TextStyle(
-                      color: _weatherRisk != '-' && _weatherRisk != 'NONE'
-                          ? Colors.deepOrange.shade800
-                          : null,
-                      fontWeight: _weatherRisk != '-' && _weatherRisk != 'NONE'
-                          ? FontWeight.w600
-                          : null,
-                    ),
-                  ),
                   const Divider(height: 20),
                   Text(
                     'Overall paddy risk: ${_riskLabel(_overallCondition())}',
@@ -1156,6 +1148,27 @@ class _HomePageState extends State<HomePage> {
                     ],
                   ),
                 ],
+              ),
+            ),
+          ),
+          Card(
+            color: weatherRiskColor.withValues(alpha: 0.08),
+            child: ListTile(
+              leading: Icon(
+                Icons.warning_amber_rounded,
+                color: weatherRiskColor,
+              ),
+              title: const Text(
+                'AI Weather Risk',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: Text(
+                weatherRiskText,
+                style: TextStyle(
+                  color: weatherRiskColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),

@@ -34,9 +34,9 @@
       BLUE steady           WATCH    outside good field conditions
       BLUE steady           WATCH    one or more readings are moderate
       BLUE fast blink       FAULT    DHT11 is not answering
-      RED fast blink + short beep every 5 seconds HIGH
+      RED fast blink + 100 ms beep every 2 seconds HIGH
                                  very-bad reading or weather risk
-      RED fast blink + long beep every 5 seconds DISEASE
+      RED fast blink + continuous buzzer DISEASE
                                  AI found a disease on a leaf
 
   BLUETOOTH COMMANDS (end each with a new line)
@@ -127,9 +127,8 @@ uint8_t riskStreak = 0;
 uint8_t level = LV_SAFE;
 bool  sensorFault = false;
 bool  muted = false;
-const unsigned long CONDITION_BEEP_MS = 150UL;
-const unsigned long DISEASE_BEEP_MS = 1000UL;
-const unsigned long ALARM_GAP_MS = 5000UL;
+const unsigned long CONDITION_BEEP_MS = 100UL;
+const unsigned long CONDITION_BEEP_GAP_MS = 2000UL;
 unsigned long nextAlarmBeepAt = 0;
 unsigned long alarmBeepUntil = 0;
 bool redAlertWasActive = false;
@@ -273,24 +272,26 @@ void updateOutputs(unsigned long now) {
   bool redAlert = level == LV_DISEASE ||
                   (level == LV_HIGH && !sensorFault);
 
-  if (!redAlert) {
+  if (level == LV_DISEASE) {
+    redAlertWasActive = true;
+    lastRedAlertLevel = LV_DISEASE;
+    nextAlarmBeepAt = 0;
+    alarmBeepUntil = 0;
+  } else if (level == LV_HIGH && !sensorFault) {
+    if (!redAlertWasActive || lastRedAlertLevel != LV_HIGH) {
+      redAlertWasActive = true;
+      lastRedAlertLevel = LV_HIGH;
+      nextAlarmBeepAt = now;                // first short beep immediately
+    }
+    if ((long)(now - nextAlarmBeepAt) >= 0) {
+      alarmBeepUntil = now + CONDITION_BEEP_MS;
+      nextAlarmBeepAt = now + CONDITION_BEEP_GAP_MS;
+    }
+  } else {
     redAlertWasActive = false;
     lastRedAlertLevel = LV_SAFE;
     nextAlarmBeepAt = 0;
     alarmBeepUntil = 0;
-  } else {
-    if (!redAlertWasActive || level != lastRedAlertLevel) {
-      redAlertWasActive = true;
-      lastRedAlertLevel = level;
-      nextAlarmBeepAt = now;                // first beep immediately
-    }
-    if ((long)(now - nextAlarmBeepAt) >= 0) {
-      unsigned long beepLength = level == LV_DISEASE
-          ? DISEASE_BEEP_MS
-          : CONDITION_BEEP_MS;
-      alarmBeepUntil = now + beepLength;
-      nextAlarmBeepAt = now + ALARM_GAP_MS;
-    }
   }
 
   if (sensorFault && level != LV_DISEASE) {   // a disease alert wins
@@ -307,7 +308,11 @@ void updateOutputs(unsigned long now) {
   setLeds(r, g, b);
 
   bool buz = false;
-  if (!muted && redAlert) buz = (long)(alarmBeepUntil - now) > 0;
+  if (!muted && level == LV_DISEASE) {
+    buz = true;
+  } else if (!muted && redAlert && level == LV_HIGH) {
+    buz = (long)(alarmBeepUntil - now) > 0;
+  }
   buzzerWrite(buz);
 }
 

@@ -768,8 +768,8 @@ class _HomePageState extends State<HomePage> {
         : (!buzzerActive
               ? 'OFF'
               : (lvl == 3
-                    ? 'Long beep every 5 seconds'
-                    : 'Short beep every 5 seconds'));
+                    ? 'Continuous buzzer'
+                    : '100 ms beep every 2 seconds'));
 
     return Scaffold(
       appBar: AppBar(title: const Text('PADDY GUARD')),

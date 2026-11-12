@@ -174,11 +174,14 @@ class LeafClassifier {
     final rawPredictions = data['predictions'];
     if (rawPredictions is Map<String, dynamic>) {
       final directClass = _classFromItem(rawPredictions);
-      if (directClass != null) return directClass;
+      if (directClass != null && directClass != 'UNKNOWN') return directClass;
       final top = rawPredictions['top'] ?? rawPredictions['prediction'];
-      if (top is String) return _mapClass(top);
+      if (top is String) {
+        final mapped = _mapClass(top);
+        if (mapped != 'UNKNOWN') return mapped;
+      }
       final topClass = _classFromItem(top);
-      if (topClass != null) return topClass;
+      if (topClass != null && topClass != 'UNKNOWN') return topClass;
       final nested = rawPredictions['predictions'];
       if (nested is List && nested.isNotEmpty) {
         final aggregated = _aggregateClassPredictions(nested);
@@ -190,20 +193,23 @@ class LeafClassifier {
             ),
           );
         final found = ranked.isEmpty ? null : _classFromItem(ranked.first);
-        if (found != null) return found;
+        if (found != null && found != 'UNKNOWN') return found;
       } else if (nested is Map) {
         final found = _classFromItem(nested);
-        if (found != null) return found;
+        if (found != null && found != 'UNKNOWN') return found;
         final scored = _bestClassFromScores(nested);
-        if (scored != null) return scored;
+        if (scored != null && scored != 'UNKNOWN') return scored;
       }
       final scored = _bestClassFromScores(rawPredictions);
-      if (scored != null) return scored;
+      if (scored != null && scored != 'UNKNOWN') return scored;
     } else if (rawPredictions is List && rawPredictions.isNotEmpty) {
       final firstString = rawPredictions.whereType<String>().firstOrNull;
-      if (firstString != null) return _mapClass(firstString);
+      if (firstString != null) {
+        final mapped = _mapClass(firstString);
+        if (mapped != 'UNKNOWN') return mapped;
+      }
       final aggregated = _aggregateClassPredictions(rawPredictions);
-      if (aggregated != null) return aggregated;
+      if (aggregated != null && aggregated != 'UNKNOWN') return aggregated;
       final ranked = rawPredictions.whereType<Map<String, dynamic>>().toList()
         ..sort(
           (a, b) => ((b['confidence'] as num?) ?? 0).compareTo(
@@ -212,15 +218,21 @@ class LeafClassifier {
         );
       if (ranked.isNotEmpty) {
         final found = _classFromItem(ranked.first);
-        if (found != null) return found;
+        if (found != null && found != 'UNKNOWN') return found;
       }
     }
     final topLevel = data['top'] ?? data['class'] ?? data['class_name'];
-    if (topLevel is String) return _mapClass(topLevel);
+    if (topLevel is String) {
+      final mapped = _mapClass(topLevel);
+      if (mapped != 'UNKNOWN') return mapped;
+    }
     final predictedClasses = data['predicted_classes'];
     if (predictedClasses is List && predictedClasses.isNotEmpty) {
       final first = predictedClasses.first;
-      if (first is String) return _mapClass(first);
+      if (first is String) {
+        final mapped = _mapClass(first);
+        if (mapped != 'UNKNOWN') return mapped;
+      }
     }
     final fallbackClass = _mapClass(lastRawClassLabel);
     if (fallbackClass != 'UNKNOWN') return fallbackClass;
@@ -275,7 +287,6 @@ class _HomePageState extends State<HomePage> {
   final _keyCtrl = TextEditingController();
   final _modelCtrl = TextEditingController();
   String _lastLabel = '-';
-  String? _lastRawModelClass;
   DateTime? _lastTime;
 
   double? _temp, _hum;
@@ -493,14 +504,11 @@ class _HomePageState extends State<HomePage> {
 
       setState(() {
         _lastLabel = label;
-        _lastRawModelClass = classifier.lastRawClassLabel;
         _lastTime = DateTime.now();
       });
 
       if (label == 'UNKNOWN') {
-        _addLog(
-          'Unrecognized model class: ${classifier.lastRawClassLabel}. Nothing sent.',
-        );
+        _addLog('Could not identify this leaf. Nothing sent to Arduino.');
       } else {
         if (classifier.lastPredictionSummary.isNotEmpty) {
           _addLog(
@@ -526,7 +534,6 @@ class _HomePageState extends State<HomePage> {
   Future<void> _clearAiResult() async {
     setState(() {
       _lastLabel = '-';
-      _lastRawModelClass = null;
       _lastTime = null;
       _arduinoAi = 'NONE';
     });
@@ -743,14 +750,9 @@ class _HomePageState extends State<HomePage> {
     final goodLeafWithEnoughMoisture =
         _lastLabel == 'HEALTHY' && (_soil ?? 0) > 65;
     final displayedLabel = _lastLabel == 'HEALTHY' ? 'Good leaf' : _lastLabel;
-    final resultSubtitle =
-        _lastLabel == 'UNKNOWN' &&
-            _lastRawModelClass != null &&
-            _lastRawModelClass != 'not provided'
-        ? 'Roboflow class: $_lastRawModelClass'
-        : (_lastTime == null
-              ? 'No leaf analysed yet'
-              : 'at ${_lastTime!.hour.toString().padLeft(2, '0')}:${_lastTime!.minute.toString().padLeft(2, '0')}');
+    final resultSubtitle = _lastTime == null
+        ? 'No leaf analysed yet'
+        : 'at ${_lastTime!.hour.toString().padLeft(2, '0')}:${_lastTime!.minute.toString().padLeft(2, '0')}';
     final weatherRiskText = _weatherRisk == '-'
         ? 'Waiting for Arduino'
         : _riskName(_weatherRisk);

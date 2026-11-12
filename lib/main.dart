@@ -4,12 +4,13 @@
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:bluetooth_serial_next/bluetooth_serial_next.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -133,6 +134,12 @@ class _HomePageState extends State<HomePage> {
   Timer? _timer;
   bool _monitoring = false;
   bool _busy = false;
+  bool _blinkOn = true;
+  bool _sensorFault = false;
+  bool _muted = false;
+  Timer? _blinkTimer;
+  Uint8List? _selectedLeafBytes;
+  final _imagePicker = ImagePicker();
   int _intervalMin = 5;
 
   final _keyCtrl = TextEditingController();
@@ -149,6 +156,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    _blinkTimer = Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (mounted) setState(() => _blinkOn = !_blinkOn);
+    });
     _init();
   }
 
@@ -317,6 +327,8 @@ class _HomePageState extends State<HomePage> {
           _soil = int.tryParse(p[3]);
           _level = int.tryParse(p[4]);
           if (p.length >= 7) _weatherRisk = p[6];
+          if (p.length >= 8) _sensorFault = p[7] == '1';
+          if (p.length >= 9) _muted = p[8] == '1';
         });
       }
     } else {
@@ -325,18 +337,40 @@ class _HomePageState extends State<HomePage> {
   }
 
   // --------------------- Capture + analyse + send -------------------
+  Future<void> _pickLeafPhoto() async {
+    try {
+      final file = await _imagePicker.pickImage(source: ImageSource.gallery);
+      if (file == null) return;
+      setState(() => _selectedLeafBytes = null);
+      final bytes = await file.readAsBytes();
+      setState(() => _selectedLeafBytes = bytes);
+      _addLog('Selected leaf photo');
+    } catch (e) {
+      _addLog('Could not open photo gallery: $e');
+    }
+  }
+
+  Future<void> _useSampleLeaf() async {
+    final data = await rootBundle.load('assets/sample_healthy_rice.jpg');
+    setState(() => _selectedLeafBytes = data.buffer.asUint8List());
+    _addLog('Loaded healthy rice sample photo');
+  }
+
   Future<void> _cycle() async {
     if (_busy) return;
     _busy = true;
     if (mounted) setState(() {});
     try {
-      final cam = _cam;
-      if (cam == null || !cam.value.isInitialized) throw 'Camera not ready';
       if (_keyCtrl.text.trim().isEmpty) throw 'Enter the API key first';
       if (_modelCtrl.text.trim().isEmpty) throw 'Enter the Roboflow model ID';
 
-      final shot = await cam.takePicture();
-      final bytes = await shot.readAsBytes();
+      var bytes = _selectedLeafBytes;
+      if (bytes == null) {
+        final cam = _cam;
+        if (cam == null || !cam.value.isInitialized) throw 'Camera not ready';
+        final shot = await cam.takePicture();
+        bytes = await shot.readAsBytes();
+      }
       _addLog('Analysing leaf...');
       final label = await LeafClassifier(
         _keyCtrl.text.trim(),
@@ -432,9 +466,119 @@ class _HomePageState extends State<HomePage> {
     return 'Above the dry threshold, but below BLB soil threshold (≥60%).';
   }
 
+  String _condition(
+    double? value,
+    double goodMin,
+    double goodMax,
+    double moderateMin,
+    double moderateMax,
+  ) {
+    if (value == null) return 'Waiting';
+    if (value >= goodMin && value <= goodMax) return 'Good';
+    if (value >= moderateMin && value <= moderateMax) return 'Moderate';
+    return 'Very bad';
+  }
+
+  String _temperatureCondition() {
+    final value = _temp;
+    if (value == null) return 'Waiting';
+    if (value >= 25 && value <= 35) return 'Good';
+    if ((value >= 20 && value < 25) || (value > 35 && value <= 40)) {
+      return 'Moderate';
+    }
+    // The reference chart leaves 15–19°C unclassified; flag it as moderate.
+    if (value >= 15 && value < 20) {
+      return 'Moderate';
+    }
+    return 'Very bad';
+  }
+
+  String _overallCondition() {
+    if (_temp == null || _hum == null || _soil == null) {
+      return 'Waiting for readings';
+    }
+    final bands = [
+      _temperatureCondition(),
+      _condition(_hum, 70, 90, 50, 95),
+      _soil! >= 70 ? 'Good' : (_soil! >= 40 ? 'Moderate' : 'Very bad'),
+    ];
+    if (bands.contains('Very bad')) return 'Very bad';
+    if (bands.contains('Moderate')) return 'Moderate';
+    return 'Good';
+  }
+
+  Color _conditionColor(String band) => band == 'Good'
+      ? Colors.green
+      : (band == 'Moderate'
+            ? Colors.deepOrange
+            : (band.startsWith('Waiting') ? Colors.grey : Colors.red));
+
+  String _riskName(String risk) => switch (risk) {
+    'BLAST' => 'Rice blast',
+    'BROWNSPOT' => 'Brown spot',
+    'BLB' => 'Bacterial leaf blight',
+    'NONE' => 'None',
+    '-' => 'Waiting for Arduino',
+    _ => risk,
+  };
+
+  Widget _conditionRow(String title, String band) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      children: [
+        Expanded(child: Text(title)),
+        Text(
+          band,
+          style: TextStyle(
+            color: band == 'Waiting' ? null : _conditionColor(band),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _rgbIndicator(
+    String name,
+    Color color,
+    bool active, {
+    bool blink = false,
+  }) {
+    final visible = active && (!blink || _blinkOn);
+    return Expanded(
+      child: Column(
+        children: [
+          AnimatedOpacity(
+            opacity: visible ? 1 : 0.18,
+            duration: const Duration(milliseconds: 120),
+            child: Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color,
+                boxShadow: visible
+                    ? [
+                        BoxShadow(
+                          color: color.withValues(alpha: 0.6),
+                          blurRadius: 10,
+                        ),
+                      ]
+                    : null,
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(name),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
+    _blinkTimer?.cancel();
     _lineSub?.cancel();
     _port?.close();
     _cam?.dispose();
@@ -459,7 +603,14 @@ class _HomePageState extends State<HomePage> {
     final displayedLabel = _lastLabel == 'HEALTHY' ? 'Good leaf' : _lastLabel;
     final weatherRiskText = _weatherRisk == '-'
         ? 'Waiting for Arduino'
-        : (_weatherRisk == 'NONE' ? 'None' : _weatherRisk);
+        : _riskName(_weatherRisk);
+    final statusKnown = lvl != null && lvl >= 0 && lvl < 4;
+    final greenActive = statusKnown && lvl == 0 && !_sensorFault;
+    final blueActive = statusKnown && (lvl == 1 || _sensorFault);
+    final redActive = statusKnown && (lvl == 2 || lvl == 3) && !_sensorFault;
+    final anyBlink =
+        _sensorFault || lvl == 3 || (lvl == 1 && (_soil ?? 100) < 20);
+    final buzzerActive = statusKnown && (lvl == 2 || lvl == 3) && !_muted;
 
     return Scaffold(
       appBar: AppBar(title: const Text('PaddyGuard')),
@@ -553,6 +704,27 @@ class _HomePageState extends State<HomePage> {
                       height: 80,
                       child: Center(child: Text('Camera not ready')),
                     ),
+                  if (_selectedLeafBytes != null) ...[
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        _selectedLeafBytes!,
+                        height: 150,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton.icon(
+                        onPressed: () =>
+                            setState(() => _selectedLeafBytes = null),
+                        icon: const Icon(Icons.camera_alt_outlined),
+                        label: const Text('Use live camera instead'),
+                      ),
+                    ),
+                  ],
                   if (_backCameras.length > 1) ...[
                     const SizedBox(height: 4),
                     InputDecorator(
@@ -658,6 +830,21 @@ class _HomePageState extends State<HomePage> {
                       const Text(' min'),
                     ],
                   ),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _busy ? null : _pickLeafPhoto,
+                        icon: const Icon(Icons.photo_library_outlined),
+                        label: const Text('Choose leaf photo'),
+                      ),
+                      TextButton.icon(
+                        onPressed: _busy ? null : _useSampleLeaf,
+                        icon: const Icon(Icons.eco_outlined),
+                        label: const Text('Try healthy sample'),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -708,8 +895,16 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const SizedBox(height: 8),
                   Text('Temperature: ${_temp?.toStringAsFixed(1) ?? '-'} °C'),
+                  _conditionRow(
+                    'Temperature condition',
+                    _temperatureCondition(),
+                  ),
                   Text(
                     'Relative humidity: ${_hum?.toStringAsFixed(0) ?? '-'} %',
+                  ),
+                  _conditionRow(
+                    'Humidity condition',
+                    _condition(_hum, 70, 90, 50, 95),
                   ),
                   Text(
                     'Humidity guide: ${_humidityGuidance()}',
@@ -720,6 +915,14 @@ class _HomePageState extends State<HomePage> {
                     ),
                   ),
                   Text('Soil moisture: ${_soil ?? '-'} %'),
+                  _conditionRow(
+                    'Soil condition',
+                    _soil == null
+                        ? 'Waiting'
+                        : (_soil! >= 70
+                              ? 'Good'
+                              : (_soil! >= 40 ? 'Moderate' : 'Very bad')),
+                  ),
                   Text(
                     'Paddy soil: ${_soilMoistureGuidance()}',
                     style: TextStyle(
@@ -748,9 +951,49 @@ class _HomePageState extends State<HomePage> {
                           : null,
                     ),
                   ),
+                  const Divider(height: 20),
+                  Text(
+                    'Overall paddy condition: ${_overallCondition()}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: _conditionColor(_overallCondition()),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text('Arduino RGB status (shown on screen)'),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _rgbIndicator(
+                        'Red',
+                        Colors.red,
+                        redActive,
+                        blink: anyBlink && redActive,
+                      ),
+                      _rgbIndicator('Green', Colors.green, greenActive),
+                      _rgbIndicator(
+                        'Blue',
+                        Colors.blue,
+                        blueActive,
+                        blink: anyBlink && blueActive,
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.volume_up,
+                        color: buzzerActive ? Colors.red : Colors.grey,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Arduino buzzer: ${buzzerActive ? 'ON' : (_muted ? 'Muted' : 'OFF')}',
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 6),
                   Chip(
-                    backgroundColor: lvlColor.withOpacity(0.15),
+                    backgroundColor: lvlColor.withValues(alpha: 0.15),
                     label: Text(
                       'Level: ${(lvl != null && lvl >= 0 && lvl < 4) ? levelNames[lvl] : '-'}',
                       style: TextStyle(

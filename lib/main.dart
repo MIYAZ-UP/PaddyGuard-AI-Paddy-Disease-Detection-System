@@ -59,7 +59,13 @@ class LeafClassifier {
 
   static String? _classFromItem(dynamic item) {
     if (item is! Map<String, dynamic>) return null;
-    final name = item['class'] ?? item['class_name'] ?? item['label'];
+    final name =
+        item['class'] ??
+        item['class_name'] ??
+        item['class_label'] ??
+        item['predicted_class'] ??
+        item['label'] ??
+        item['name'];
     return name is String ? _mapClass(name) : null;
   }
 
@@ -74,11 +80,29 @@ class LeafClassifier {
 
   static String _findRawClass(dynamic value) {
     if (value is Map) {
-      for (final key in ['class', 'class_name', 'label', 'top']) {
+      for (final key in [
+        'class',
+        'class_name',
+        'class_label',
+        'predicted_class',
+        'top_class',
+        'label',
+        'name',
+        'top',
+      ]) {
         final candidate = value[key];
         if (candidate is String) return candidate;
       }
-      for (final key in ['prediction', 'predictions', 'predicted_classes']) {
+      for (final key in [
+        'prediction',
+        'predictions',
+        'predicted_classes',
+        'classification',
+        'classifications',
+        'result',
+        'results',
+        'output',
+      ]) {
         if (value.containsKey(key)) {
           final found = _findRawClass(value[key]);
           if (found != 'not provided') return found;
@@ -173,6 +197,8 @@ class LeafClassifier {
       final first = predictedClasses.first;
       if (first is String) return _mapClass(first);
     }
+    final fallbackClass = _mapClass(lastRawClassLabel);
+    if (fallbackClass != 'UNKNOWN') return fallbackClass;
     return 'UNKNOWN';
   }
 }

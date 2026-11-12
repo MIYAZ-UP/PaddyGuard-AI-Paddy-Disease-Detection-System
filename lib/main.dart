@@ -581,36 +581,36 @@ class _HomePageState extends State<HomePage> {
     final humidity = _hum;
     if (humidity == null) return 'Waiting for Arduino reading.';
     if (humidity < 50) {
-      return 'Very Bad — High Risk: below 50% in the growing-conditions chart.';
+      return 'High Risk: below 50% in the growing-conditions chart.';
     }
     if (humidity < 70) {
-      return 'Moderate — Medium Risk: 50–69% in the growing-conditions chart.';
+      return 'Medium Risk: 50–69% in the growing-conditions chart.';
     }
     if (humidity <= 90) {
-      return 'Good — Low Risk: 70–90% in the growing-conditions chart.';
+      return 'Low Risk: 70–90% in the growing-conditions chart.';
     }
     if (humidity <= 95) {
-      return 'Moderate — Medium Risk: 91–95% in the growing-conditions chart.';
+      return 'Medium Risk: 91–95% in the growing-conditions chart.';
     }
-    return 'Very Bad — High Risk: above 95% in the growing-conditions chart.';
+    return 'High Risk: above 95% in the growing-conditions chart.';
   }
 
   String _soilMoistureGuidance() {
     final moisture = _soil;
     if (moisture == null) return 'Waiting for Arduino reading.';
     if (moisture < 20) {
-      return 'Very Bad — High Risk: below 20%, dry-soil alert and below the chart’s <40% soil band.';
+      return 'High Risk: below 20%, dry-soil alert and below the chart’s <40% soil band.';
     }
     if (moisture >= 90) {
-      return 'Good — Low Risk: paddy probes may read close to 100% in flooded fields.';
+      return 'Low Risk: paddy probes may read close to 100% in flooded fields.';
     }
     if (moisture >= 70) {
-      return 'Good — Low Risk: 70–100% in the growing-conditions chart.';
+      return 'Low Risk: 70–100% in the growing-conditions chart.';
     }
     if (moisture >= 40) {
-      return 'Moderate — Medium Risk: 40–69% in the growing-conditions chart.';
+      return 'Medium Risk: 40–69% in the growing-conditions chart.';
     }
-    return 'Very Bad — High Risk: below 40% in the growing-conditions chart.';
+    return 'High Risk: below 40% in the growing-conditions chart.';
   }
 
   String _condition(
@@ -661,9 +661,9 @@ class _HomePageState extends State<HomePage> {
             : (band.startsWith('Waiting') ? Colors.grey : Colors.red));
 
   String _riskLabel(String condition) => switch (condition) {
-    'Good' => 'Good — Low Risk',
-    'Moderate' => 'Moderate — Medium Risk',
-    'Very bad' => 'Very Bad — High Risk',
+    'Good' => 'Low Risk',
+    'Moderate' => 'Medium Risk',
+    'Very bad' => 'High Risk',
     _ => condition,
   };
 
@@ -1080,7 +1080,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                   const Divider(height: 20),
                   Text(
-                    'Overall paddy condition: ${_riskLabel(_overallCondition())}',
+                    'Overall paddy risk: ${_riskLabel(_overallCondition())}',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: _conditionColor(_overallCondition()),

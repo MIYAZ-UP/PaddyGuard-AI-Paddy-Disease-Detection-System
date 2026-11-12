@@ -20,6 +20,6 @@ Pair the HC-05 in the phone's Bluetooth settings, connect it in PaddyGuard, ente
 
 ## Arduino setup
 
-Open `arduino/PaddyGuard/PaddyGuard.ino` in the Arduino IDE. Install Adafruit's DHT sensor library and Adafruit Unified Sensor, select Arduino Nano, and upload the sketch. AI disease alerts sound continuously until cleared or muted. Very-bad field or weather alerts beep immediately for 100 ms every two seconds. The sketch's pin map and Bluetooth commands are documented at the top of the file.
+Open `arduino/PaddyGuard/PaddyGuard.ino` in the Arduino IDE. Install Adafruit's DHT sensor library and Adafruit Unified Sensor, select Arduino Nano, and upload the sketch. AI disease alerts sound continuously until cleared or muted. Very-bad field or weather alerts beep immediately for 150 ms every two seconds. The sketch's pin map and Bluetooth commands are documented at the top of the file.
 
 Calibrate the soil probe with `CALDRY` and `CALWET`. The reported percentage is relative to those calibration readings, not a universal soil-water percentage. For a flooded paddy field, the probe may read near 100%; interpret the weather-risk thresholds in the sketch with that in mind.
